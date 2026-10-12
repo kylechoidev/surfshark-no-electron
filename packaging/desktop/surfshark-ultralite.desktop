@@ -1,0 +1,22 @@
+[Desktop Entry]
+Type=Application
+Version=1.0
+Name=Surf Shark Ultra Lite
+GenericName=WireGuard VPN Client
+Comment=Zero-Electron Native NetworkManager WireGuard Client for Surfshark
+Icon=surfshark-ultralite
+Exec=surfshark-lite ui
+Terminal=false
+Categories=Network;Security;VPN;
+Keywords=vpn;surfshark;wireguard;privacy;
+StartupNotify=true
+StartupWMClass=surfshark-ultralite
+Actions=ConnectFastest;Disconnect;
+
+[Desktop Action ConnectFastest]
+Name=Connect Fastest Server
+Exec=surfshark-lite connect fastest
+
+[Desktop Action Disconnect]
+Name=Disconnect VPN
+Exec=surfshark-lite disconnect

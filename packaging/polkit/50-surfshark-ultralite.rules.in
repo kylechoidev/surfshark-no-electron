@@ -1,0 +1,10 @@
+// Polkit rule for Surf Shark Ultra Lite (headless / SSH / non-seat sessions).
+// Installed by `./install.sh --polkit` to /etc/polkit-1/rules.d/50-surfshark-ultralite.rules
+polkit.addRule(function(action, subject) {
+    if (subject.user === "@USERNAME@" &&
+        (action.id === "org.freedesktop.NetworkManager.settings.modify.own" ||
+         action.id === "org.freedesktop.NetworkManager.settings.modify.system" ||
+         action.id === "org.freedesktop.NetworkManager.network-control")) {
+        return polkit.Result.YES;
+    }
+});

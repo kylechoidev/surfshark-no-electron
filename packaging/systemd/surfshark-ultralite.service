@@ -1,0 +1,24 @@
+[Unit]
+Description=Surf Shark Ultra Lite — Native Zero-Electron WireGuard Control Daemon
+Documentation=https://github.com/redking/surfshark-ultralite
+After=network-online.target dbus.socket
+
+[Service]
+Type=notify
+NotifyAccess=main
+Environment="PYTHONPATH=%h/.local/share/surfshark-ultralite/src"
+ExecStart=/usr/bin/python3 -m surfshark_lite daemon
+Restart=on-failure
+RestartSec=3
+WatchdogSec=90
+
+# Hardening & Resource Bounds
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ReadWritePaths=%h/.config/surfshark-ultralite %h/.cache/surfshark-ultralite %h/.local/state/surfshark-ultralite %h/.local/share/surfshark-ultralite %t
+MemoryMax=64M
+CPUQuota=25%
+
+[Install]
+WantedBy=default.target

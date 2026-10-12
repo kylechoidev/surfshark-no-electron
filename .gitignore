@@ -1,0 +1,18 @@
+# Phase 0 raw extraction (contains proprietary code excerpts — never commit)
+tools/out/
+
+# Python artifacts
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+dist/
+build/
+.eggs/
+.venv/
+venv/
+
+# Logs and local backups
+*.log
+.backups/
+.DS_Store

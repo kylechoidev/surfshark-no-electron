@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Surf Shark Ultra Lite</title>
+  <link rel="icon" href="/icon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/app.css">
+</head>
+<body>
+  <div class="app-shell">
+    <header class="topbar">
+      <div class="brand">
+        <img src="/icon.svg" alt="" class="brand-icon" width="28" height="28">
+        <div>
+          <h1 class="brand-title">Surf Shark Ultra Lite</h1>
+          <span class="brand-sub" id="version-label">v2.0.0 · Zero-Electron Native WireGuard</span>
+        </div>
+      </div>
+      <div class="topbar-badges">
+        <span class="badge" id="auth-badge">Checking Auth…</span>
+        <span class="badge" id="verdict-badge">EXPOSED</span>
+      </div>
+    </header>
+
+    <section class="hero-card" id="hero-card">
+      <div class="hero-main">
+        <div class="status-block">
+          <div class="status-overline" id="driver-label">DRIVER: AUTO</div>
+          <div class="status-headline" id="conn-state">DISCONNECTED</div>
+          <div class="status-reason" id="verdict-reason">VPN tunnel is disconnected</div>
+        </div>
+        <div class="hero-actions">
+          <button type="button" class="btn btn-primary" id="btn-connect-toggle">Connect Fastest</button>
+          <button type="button" class="btn btn-secondary" id="btn-reconnect" hidden>Reconnect</button>
+        </div>
+      </div>
+
+      <form class="quick-form" id="quick-connect-form">
+        <input
+          type="text"
+          id="quick-target-input"
+          class="input"
+          placeholder="Quick connect or switch (e.g. sfo, tokyo, uk, frankfurt, fastest de)…"
+          autocomplete="off"
+        >
+        <button type="submit" class="btn btn-accent">Go</button>
+      </form>
+
+      <div class="telemetry-grid">
+        <div class="metric-box">
+          <span class="metric-label">Active Server</span>
+          <span class="metric-value" id="metric-server">—</span>
+          <span class="metric-sub" id="metric-hostname">Not connected</span>
+        </div>
+        <div class="metric-box">
+          <span class="metric-label">Egress IP &amp; Location</span>
+          <span class="metric-value mono" id="metric-ip">—</span>
+          <span class="metric-sub" id="metric-isp">Unverified</span>
+        </div>
+        <div class="metric-box">
+          <span class="metric-label">WireGuard Handshake</span>
+          <span class="metric-value" id="metric-handshake">—</span>
+          <span class="metric-sub" id="metric-iface">Interface: —</span>
+        </div>
+        <div class="metric-box">
+          <span class="metric-label">Tunnel Traffic</span>
+          <span class="metric-value mono" id="metric-traffic">0 B ↓ / 0 B ↑</span>
+          <span class="metric-sub" id="metric-load">Server Load: —</span>
+        </div>
+      </div>
+
+      <div class="alert-banner" id="error-banner" hidden></div>
+      <div class="notice-banner" id="reconnect-banner" hidden>
+        <span>Settings updated. Reconnect to apply interface/routing changes.</span>
+        <button type="button" class="btn btn-small" id="btn-banner-reconnect">Reconnect Now</button>
+      </div>
+    </section>
+
+    <nav class="tabs" role="tablist">
+      <button type="button" class="tab active" data-tab="servers">Servers</button>
+      <button type="button" class="tab" data-tab="account">Account &amp; Keys</button>
+      <button type="button" class="tab" data-tab="settings">Settings</button>
+      <button type="button" class="tab" data-tab="doctor">Doctor &amp; Logs</button>
+    </nav>
+
+    <main class="tab-panels">
+      <!-- SERVERS PANEL -->
+      <section class="panel active" id="panel-servers">
+        <div class="toolbar">
+          <input type="search" id="server-search" class="input" placeholder="Filter by city, country, or hostname…">
+          <select id="server-country" class="select">
+            <option value="">All Countries</option>
+          </select>
+          <select id="server-kind" class="select">
+            <option value="generic">Standard (Generic)</option>
+            <option value="">All Types</option>
+            <option value="static">Static IP</option>
+            <option value="double">MultiHop (Double)</option>
+          </select>
+          <button type="button" class="btn btn-secondary" id="btn-probe-rtt">Probe RTT</button>
+          <button type="button" class="btn btn-secondary" id="btn-refresh-servers">Refresh</button>
+        </div>
+        <div class="table-wrap">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>Location</th>
+                <th>Hostname</th>
+                <th>Type</th>
+                <th>Load</th>
+                <th>RTT</th>
+                <th>Action</th>
+              </tr>
+            </thead>
+            <tbody id="servers-tbody">
+              <tr><td colspan="6" class="empty-cell">Loading server catalog…</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- ACCOUNT & KEYS PANEL -->
+      <section class="panel" id="panel-account" hidden>
+        <div class="two-col">
+          <div class="card">
+            <h2>Surfshark Authentication</h2>
+            <p class="muted" id="account-status-line">Status: Checking…</p>
+
+            <form id="login-form" class="stack-form">
+              <label class="field-label" for="login-email">Email Address</label>
+              <input type="email" id="login-email" class="input" placeholder="you@example.com" autocomplete="username">
+              <label class="field-label" for="login-password">Password</label>
+              <input type="password" id="login-password" class="input" placeholder="••••••••••••" autocomplete="current-password">
+              <div class="button-row">
+                <button type="submit" class="btn btn-primary">Sign In</button>
+                <button type="button" class="btn btn-secondary" id="btn-import-official">Import Official App Session</button>
+              </div>
+            </form>
+
+            <form id="otp-form" class="stack-form" hidden>
+              <label class="field-label" for="otp-code">2FA Verification Code (6–8 digits)</label>
+              <input type="text" id="otp-code" class="input mono" placeholder="123456" inputmode="numeric" maxlength="8">
+              <div class="button-row">
+                <button type="submit" class="btn btn-accent">Verify 2FA Code</button>
+                <button type="button" class="btn btn-secondary" id="btn-cancel-otp">Cancel</button>
+              </div>
+            </form>
+
+            <div class="button-row top-gap">
+              <button type="button" class="btn btn-danger" id="btn-logout">Log Out &amp; Wipe Credentials</button>
+            </div>
+          </div>
+
+          <div class="card">
+            <h2>WireGuard Keypair</h2>
+            <dl class="kv-list">
+              <dt>Public Key</dt>
+              <dd class="mono" id="wg-pubkey">—</dd>
+              <dt>Registered At</dt>
+              <dd id="wg-registered">—</dd>
+              <dt>Expires At</dt>
+              <dd id="wg-expires">—</dd>
+              <dt>Last Validated</dt>
+              <dd id="wg-validated">—</dd>
+            </dl>
+            <div class="button-row top-gap">
+              <button type="button" class="btn btn-secondary" id="btn-rotate-key">Revalidate / Rotate Key</button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- SETTINGS PANEL -->
+      <section class="panel" id="panel-settings" hidden>
+        <div class="card">
+          <h2>Tunnel &amp; Protection Settings</h2>
+          <form id="settings-form" class="settings-grid">
+            <label class="toggle-row">
+              <span>
+                <strong>CleanWeb Ad &amp; Malware Blocker</strong>
+                <small class="muted">Use Surfshark CleanWeb filtering DNS servers inside the tunnel</small>
+              </span>
+              <input type="checkbox" id="set-cleanweb">
+            </label>
+
+            <label class="toggle-row">
+              <span>
+                <strong>IPv6 Leak Guard</strong>
+                <small class="muted">Capture unmarked IPv6 traffic into tunnel table to prevent dual-stack leaks</small>
+              </span>
+              <input type="checkbox" id="set-ipv6-guard">
+            </label>
+
+            <label class="toggle-row">
+              <span>
+                <strong>Autoconnect on Startup</strong>
+                <small class="muted">Automatically connect when the background daemon starts</small>
+              </span>
+              <input type="checkbox" id="set-autoconnect">
+            </label>
+
+            <label class="toggle-row">
+              <span>
+                <strong>Self-Healing Watchdog</strong>
+                <small class="muted">Automatically recover from stale handshakes or routing drift (L1–L4)</small>
+              </span>
+              <input type="checkbox" id="set-watchdog">
+            </label>
+
+            <div class="field-group">
+              <label class="field-label" for="set-lan-bypass">Local Network (LAN) Bypass</label>
+              <select id="set-lan-bypass" class="select">
+                <option value="lan">Allow RFC1918 LAN &amp; Local Subnets (Recommended)</option>
+                <option value="connected">Strict Connected Subnets Only</option>
+              </select>
+            </div>
+
+            <div class="field-group">
+              <label class="field-label" for="set-driver">Tunnel Driver Backend</label>
+              <select id="set-driver" class="select">
+                <option value="auto">Auto (Prefer Native NetworkManager)</option>
+                <option value="native">Native NetworkManager (libnm)</option>
+                <option value="surfsharkd">Fallback surfsharkd.sock</option>
+              </select>
+            </div>
+
+            <div class="button-row">
+              <button type="submit" class="btn btn-primary">Save Settings</button>
+              <button type="button" class="btn btn-secondary" id="btn-check-ip">Verify Egress IP Now</button>
+            </div>
+          </form>
+        </div>
+      </section>
+
+      <!-- DOCTOR & LOGS PANEL -->
+      <section class="panel" id="panel-doctor" hidden>
+        <div class="two-col">
+          <div class="card">
+            <div class="card-header">
+              <h2>System Doctor</h2>
+              <button type="button" class="btn btn-secondary btn-small" id="btn-run-doctor">Run Checks</button>
+            </div>
+            <div id="doctor-results" class="doctor-list">
+              <p class="muted">Click "Run Checks" to inspect NetworkManager, Polkit, routing rules, and keys.</p>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-header">
+              <h2>Daemon Logs (Redacted)</h2>
+              <button type="button" class="btn btn-secondary btn-small" id="btn-refresh-logs">Refresh</button>
+            </div>
+            <pre class="log-box mono" id="logs-output">Loading logs…</pre>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+  <script src="/app.js"></script>
+</body>
+</html>

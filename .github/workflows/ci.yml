@@ -1,0 +1,22 @@
+name: CI
+
+on:
+  push:
+    branches: ["main", "master"]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-22.04, ubuntu-24.04]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compile all sources
+        run: python3 -m compileall -q src tests
+      - name: Run unit test suite
+        env:
+          PYTHONPATH: src
+        run: python3 -m unittest discover -s tests -v
