@@ -91,6 +91,29 @@ class Cluster:
         return f"{self.location}, {self.country_code}"
 
     def to_summary(self, latency_ms: float | None = None) -> dict[str, Any]:
+        ce = COUNTRIES_BY_A2.get(self.country_code)
+        extra_terms: list[str] = []
+        if ce is not None:
+            extra_terms.append(ce.alpha3.lower())
+            extra_terms.extend(ce.aliases)
+            if ce.alpha2 == "GB":
+                extra_terms.append("uk")
+        loc_norm = norm_text(self.location)
+        short_norm = norm_text(_short_city_name(self.location))
+        for alias_k, target_city in CITY_ALIASES.items():
+            tnorm = norm_text(target_city)
+            if tnorm in (loc_norm, short_norm):
+                extra_terms.append(alias_k)
+        search_terms = " ".join(
+            [
+                self.location.lower(),
+                self.country.lower(),
+                self.country_code.lower(),
+                self.hostname.lower(),
+                (self.city_code or "").lower(),
+                *extra_terms,
+            ]
+        )
         return {
             "id": self.id,
             "label": self.label,
@@ -104,6 +127,7 @@ class Cluster:
             "kind": self.kind,
             "virtual": self.virtual,
             "flag": flag(self.country_code),
+            "search_terms": search_terms,
         }
 
 

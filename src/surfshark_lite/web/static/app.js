@@ -140,7 +140,7 @@
       if (cc && c.country_code !== cc) return false;
       if (kind && c.kind !== kind) return false;
       if (q) {
-        const hay = (c.location + " " + c.country + " " + c.country_code + " " + c.hostname).toLowerCase();
+        const hay = (c.search_terms || (c.location + " " + c.country + " " + c.country_code + " " + c.hostname)).toLowerCase();
         if (!hay.includes(q)) return false;
       }
       return true;
