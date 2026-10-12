@@ -287,7 +287,7 @@ class Controller:
         def _tick_liveness() -> None:
             if not self._running:
                 return
-            self._refresh_telemetry(probe_egress=False)
+            self._refresh_telemetry(probe_egress=False, run_watchdog=True)
             sdnotify.watchdog()
             self.schedule_timer("liveness", liveness_s, _tick_liveness)
 
@@ -297,7 +297,7 @@ class Controller:
             if not self._running:
                 return
             if self._conn_state == ConnState.CONNECTED:
-                self._refresh_telemetry(probe_egress=True)
+                self._refresh_telemetry(probe_egress=True, run_watchdog=True)
             self.schedule_timer("egress", egress_s, _tick_egress)
 
         self.schedule_timer("liveness", liveness_s, _tick_liveness)
@@ -413,13 +413,24 @@ class Controller:
         if self._conn_state == ConnState.DISCONNECTED and self.egress.baseline is None:
             when_disc = self.settings.get("probes", {}).get("when_disconnected", "surfshark-only")
             if when_disc != "none":
-                base_rep = self.egress.capture_baseline(timeout=2.5)
-                if base_rep and base_rep.country_code and self.persisted.home_location is None:
-                    ce = get_country_entry(base_rep.country_code)
-                    if ce:
-                        self.persisted = self.state_store.update(
-                            home_location=HomeLocation(lat=ce.lat, lon=ce.lon, country_code=ce.alpha2)
-                        )
+                try:
+                    base_rep = self.egress.capture_baseline(timeout=2.5)
+                    if base_rep and base_rep.country_code and self.persisted.home_location is None:
+                        ce = get_country_entry(base_rep.country_code)
+                        if ce:
+                            lat, lon = next(
+                                (
+                                    (c.lat, c.lon)
+                                    for c in self.catalog.clusters
+                                    if c.country_code.upper() == ce.alpha2 and c.lat is not None and c.lon is not None
+                                ),
+                                (0.0, 0.0),
+                            )
+                            self.persisted = self.state_store.update(
+                                home_location=HomeLocation(lat=lat, lon=lon, country_code=ce.alpha2)
+                            )
+                except Exception as exc:
+                    log.debug("Baseline capture skipped: %s", exc)
 
         was_connected = self._conn_state in (ConnState.CONNECTED, ConnState.SWITCHING, ConnState.RECONNECTING)
         self._conn_state = ConnState.SWITCHING if was_connected else ConnState.CONNECTING
@@ -506,7 +517,7 @@ class Controller:
         self._conn_state = ConnState.DISCONNECTED
         return self.connect(target=target)
 
-    def _refresh_telemetry(self, *, probe_egress: bool = False) -> TelemetrySnapshot:
+    def _refresh_telemetry(self, *, probe_egress: bool = False, run_watchdog: bool = False) -> TelemetrySnapshot:
         try:
             if self._driver is not None:
                 self._last_obs = self.driver.current()
@@ -530,7 +541,12 @@ class Controller:
 
         # Run watchdog ladder if enabled and desired connected
         wd_cfg = self.settings.get("watchdog", {})
-        if wd_cfg.get("enabled", True) and self.persisted.desired.connected and self._conn_state == ConnState.CONNECTED:
+        if (
+            run_watchdog
+            and wd_cfg.get("enabled", True)
+            and self.persisted.desired.connected
+            and self._conn_state == ConnState.CONNECTED
+        ):
             drv_name = self._driver.name if self._driver else "native"
             if drv_name != "surfsharkd" or wd_cfg.get("act_in_surfsharkd_mode", False):
                 dec = step_watchdog(self._watchdog, snap.verdict, time.monotonic(), desired_connected=True)

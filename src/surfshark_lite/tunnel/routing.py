@@ -233,7 +233,8 @@ def _rule_matches_kernel_entry(pr: PlannedRule, kentry: dict[str, Any]) -> bool:
             return False
 
     if pr.suppress_prefixlength is not None:
-        if kentry.get("suppress_prefixlength") != pr.suppress_prefixlength:
+        ksupp = kentry.get("suppress_prefixlength", kentry.get("suppress_prefixlen"))
+        if ksupp != pr.suppress_prefixlength:
             return False
 
     if pr.to_prefix is not None:

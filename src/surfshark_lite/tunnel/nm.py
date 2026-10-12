@@ -92,8 +92,6 @@ def _build_nm_connection(spec: TunnelSpec, username: str, scope: str) -> Any:
     s_wg.set_property(NM.SETTING_WIREGUARD_PRIVATE_KEY_FLAGS, NM.SettingSecretFlags.NONE)
     s_wg.set_property(NM.SETTING_WIREGUARD_FWMARK, spec.fwmark)
     s_wg.set_property(NM.SETTING_WIREGUARD_PEER_ROUTES, True)
-    s_wg.set_property(NM.SETTING_WIREGUARD_IP4_AUTO_DEFAULT_ROUTE, NM.Ternary.FALSE)
-    s_wg.set_property(NM.SETTING_WIREGUARD_IP6_AUTO_DEFAULT_ROUTE, NM.Ternary.FALSE)
     if spec.mtu:
         s_wg.set_property(NM.SETTING_WIREGUARD_MTU, int(spec.mtu))
     for p in spec.peers:
@@ -107,10 +105,8 @@ def _build_nm_connection(spec: TunnelSpec, username: str, scope: str) -> Any:
     for d in spec.dns4:
         s4.add_dns(d)
     s4.add_dns_search("~.")
-    s4.set_property(NM.SETTING_IP_CONFIG_DNS_PRIORITY, -50)
+    s4.set_property(NM.SETTING_IP_CONFIG_DNS_PRIORITY, -2018)
     s4.set_property(NM.SETTING_IP_CONFIG_IGNORE_AUTO_DNS, True)
-    s4.set_property(NM.SETTING_IP_CONFIG_NEVER_DEFAULT, False)
-    s4.set_property(NM.SETTING_IP_CONFIG_ROUTE_TABLE, spec.table)
     for r4 in routing.nm_rules(spec, socket.AF_INET, NM):
         s4.add_routing_rule(r4)
     con.add_setting(s4)
@@ -120,8 +116,7 @@ def _build_nm_connection(spec: TunnelSpec, username: str, scope: str) -> Any:
         s6.set_property(NM.SETTING_IP_CONFIG_METHOD, NM.SETTING_IP6_CONFIG_METHOD_MANUAL)
         addr6, plen6 = spec.address6.split("/", 1)
         s6.add_address(NM.IPAddress.new(socket.AF_INET6, addr6, int(plen6)))
-        s6.set_property(NM.SETTING_IP_CONFIG_DNS_PRIORITY, -50)
-        s6.set_property(NM.SETTING_IP_CONFIG_ROUTE_TABLE, spec.table)
+        s6.set_property(NM.SETTING_IP_CONFIG_DNS_PRIORITY, -2018)
         for r6 in routing.nm_rules(spec, socket.AF_INET6, NM):
             s6.add_routing_rule(r6)
     else:
@@ -136,8 +131,10 @@ def _is_our_connection(con: Any) -> bool:
     if con is None:
         return False
     try:
-        s_user = con.get_setting_user()
+        s_user = con.get_setting_by_name(NM.SETTING_USER_SETTING_NAME)
         if s_user is not None and s_user.get_data(OWNER_KEY) == "1":
+            return True
+        if con.get_id() == PROFILE_NAME or con.get_interface_name() == "surfshark_lite":
             return True
     except Exception:
         pass
@@ -258,7 +255,7 @@ class NmDriver:
         for ac in active_conns:
             con = ac.get_connection()
             ctype = ac.get_connection_type()
-            if _is_our_connection(con):
+            if _is_our_connection(con) or ac.get_id() == PROFILE_NAME:
                 our_ac = ac
                 break
             if ctype in ("wireguard", "vpn"):
@@ -282,7 +279,7 @@ class NmDriver:
             since = None
 
             if con is not None:
-                s_user = con.get_setting_user()
+                s_user = con.get_setting_by_name(NM.SETTING_USER_SETTING_NAME)
                 if s_user is not None:
                     cluster_hint = s_user.get_data(CLUSTER_KEY)
                 s_con = con.get_setting_connection()
@@ -359,13 +356,6 @@ class NmDriver:
 
         self._cleanup_stale_profiles_on_loop()
         con = _build_nm_connection(spec, self._username, scope)
-        opts = GLib.Variant(
-            "a{sv}",
-            {
-                "persist": GLib.Variant("s", "volatile"),
-                "bind-activation": GLib.Variant("s", "none"),
-            },
-        )
 
         def _wait_activated(ac: Any) -> None:
             state_now = ac.get_state()
@@ -422,16 +412,28 @@ class NmDriver:
             sig_holder.append(ac.connect("state-changed", _on_state))
             timer_holder.append(GLib.timeout_add_seconds(20, _on_timeout))
 
-        def _added_cb(client_obj: Any, result: Any, _data: Any) -> None:
+        def _activated_cb(client_obj: Any, act_res: Any, remote_con: Any) -> None:
             try:
-                ac, _out_res = client_obj.add_and_activate_connection2_finish(result)
+                ac = client_obj.activate_connection_finish(act_res)
             except BaseException as exc:
+                try:
+                    remote_con.delete_async(None, lambda c, r, _d: None, None)
+                except Exception:
+                    pass
                 fut.set_exception(_glib_to_driver_error(exc))
                 return
             ac.connect("notify::state", lambda *_a: self._emit_observation_on_loop())
             _wait_activated(ac)
 
-        cl.add_and_activate_connection2(con, None, None, opts, None, _added_cb, None)
+        def _added_cb(client_obj: Any, result: Any, _data: Any) -> None:
+            try:
+                remote_con = client_obj.add_connection_finish(result)
+            except BaseException as exc:
+                fut.set_exception(_glib_to_driver_error(exc))
+                return
+            client_obj.activate_connection_async(remote_con, None, None, None, _activated_cb, remote_con)
+
+        cl.add_connection_async(con, False, None, _added_cb, None)
         return fut
 
     def up(self, spec: TunnelSpec, cancel: threading.Event) -> Observation:
@@ -519,7 +521,7 @@ class NmDriver:
                     for ac in (cl.get_active_connections() or []):
                         con_prof = ac.get_connection()
                         if _is_our_connection(con_prof):
-                            su = con_prof.get_setting_user()
+                            su = con_prof.get_setting_by_name(NM.SETTING_USER_SETTING_NAME)
                             if su is not None:
                                 su.set_data(CLUSTER_KEY, spec.cluster_id)
                     fut.set_result(self._current_on_loop())
@@ -554,7 +556,7 @@ class NmDriver:
         targets: list[Any] = []
         for ac in (cl.get_active_connections() or []):
             con = ac.get_connection()
-            if _is_our_connection(con):
+            if _is_our_connection(con) or ac.get_id() == PROFILE_NAME:
                 targets.append(ac)
             elif takeover_foreign and ac.get_connection_type() in ("wireguard", "vpn"):
                 targets.append(ac)

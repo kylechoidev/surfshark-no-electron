@@ -294,12 +294,24 @@ class _SSULRequestHandler(http.server.BaseHTTPRequestHandler):
             self.wfile.write(init_frame)
             self.wfile.flush()
 
-            while True:
-                frame = stream.get(timeout=15.0)
-                if frame is None:
-                    break
-                self.wfile.write(frame)
-                self.wfile.flush()
+            ticks = 0
+            while not getattr(self.server, "_stopping", False):
+                try:
+                    frame = stream._q.get(timeout=1.0)
+                    if frame is None:
+                        break
+                    self.wfile.write(frame)
+                    self.wfile.flush()
+                    ticks = 0
+                except Exception as q_exc:
+                    if type(q_exc).__name__ == "Empty":
+                        ticks += 1
+                        if ticks >= 15:
+                            self.wfile.write(b": keepalive\n\n")
+                            self.wfile.flush()
+                            ticks = 0
+                    else:
+                        raise
         except (BrokenPipeError, ConnectionResetError, OSError):
             pass
         finally:
@@ -402,6 +414,7 @@ class DualHttpServer:
 
     def stop(self) -> None:
         if self._tcp_srv is not None:
+            setattr(self._tcp_srv, "_stopping", True)
             try:
                 self._tcp_srv.shutdown()
                 self._tcp_srv.server_close()
@@ -410,6 +423,7 @@ class DualHttpServer:
             self._tcp_srv = None
 
         if self._unix_srv is not None:
+            setattr(self._unix_srv, "_stopping", True)
             try:
                 self._unix_srv.shutdown()
                 self._unix_srv.server_close()
