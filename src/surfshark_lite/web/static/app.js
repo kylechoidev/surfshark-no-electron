@@ -121,6 +121,12 @@
 
     if (st.last_error && st.last_error.message) {
       showError(st.last_error.message);
+    } else if (connState === "CONNECTED") {
+      showError("");
+    }
+
+    if (allClusters.length > 0) {
+      renderServersTable();
     }
   }
 
@@ -152,8 +158,18 @@
       return;
     }
 
+    const activeHost = (
+      currentStatus &&
+      currentStatus.connection_state === "CONNECTED" &&
+      currentStatus.active_cluster
+    ) ? currentStatus.active_cluster.hostname : null;
+
     for (const c of filtered) {
+      const isConnectedRow = activeHost && c.hostname === activeHost;
       const tr = document.createElement("tr");
+      if (isConnectedRow) {
+        tr.className = "active-row";
+      }
 
       const tdLoc = document.createElement("td");
       tdLoc.textContent = (c.flag ? c.flag + " " : "") + c.location + ", " + c.country;
@@ -180,20 +196,26 @@
       const tdAct = document.createElement("td");
       const btn = document.createElement("button");
       btn.type = "button";
-      btn.className = "btn btn-secondary btn-small";
-      btn.textContent = "Connect";
-      btn.addEventListener("click", async () => {
-        showError("");
+      if (isConnectedRow) {
+        btn.className = "btn btn-primary btn-small";
+        btn.textContent = "Connected";
         btn.disabled = true;
-        try {
-          const st = await apiCall("POST", "/api/v1/connect", { target: c.hostname });
-          renderStatus(st);
-        } catch (err) {
-          showError(err.message);
-        } finally {
-          btn.disabled = false;
-        }
-      });
+      } else {
+        btn.className = "btn btn-secondary btn-small";
+        btn.textContent = "Connect";
+        btn.addEventListener("click", async () => {
+          showError("");
+          btn.disabled = true;
+          try {
+            const st = await apiCall("POST", "/api/v1/connect", { target: c.hostname });
+            renderStatus(st);
+          } catch (err) {
+            showError(err.message);
+          } finally {
+            btn.disabled = false;
+          }
+        });
+      }
       tdAct.appendChild(btn);
       tr.appendChild(tdAct);
 
@@ -303,6 +325,11 @@
           loadLogs();
         }
       });
+    });
+
+    $("auth-badge").addEventListener("click", () => {
+      const accTab = document.querySelector('.tab[data-tab="account"]');
+      if (accTab) accTab.click();
     });
 
     $("btn-connect-toggle").addEventListener("click", async () => {

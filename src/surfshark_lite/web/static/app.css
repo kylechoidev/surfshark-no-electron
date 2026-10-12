@@ -1,4 +1,5 @@
 :root {
+  color-scheme: dark;
   --bg: #0b111b;
   --bg-card: #121b2a;
   --bg-elevated: #182336;
@@ -13,6 +14,10 @@
   --radius: 10px;
   --font-sans: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
+
+[hidden] {
+  display: none !important;
 }
 
 * {
@@ -151,8 +156,14 @@ body {
 
 .telemetry-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 10px;
+}
+
+@media (max-width: 760px) {
+  .telemetry-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 
 .metric-box {
@@ -344,6 +355,14 @@ body {
   font-size: 11px;
   text-transform: uppercase;
   letter-spacing: 0.04em;
+}
+
+.data-table tr.active-row td {
+  background: rgba(24, 210, 182, 0.09);
+}
+
+#auth-badge {
+  cursor: pointer;
 }
 
 .empty-cell {

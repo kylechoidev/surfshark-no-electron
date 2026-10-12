@@ -140,6 +140,8 @@ class _SSULRequestHandler(http.server.BaseHTTPRequestHandler):
         self.send_header("Referrer-Policy", "no-referrer")
         if is_api:
             self.send_header("Cache-Control", "no-store")
+        else:
+            self.send_header("Cache-Control", "no-cache")
 
     def _send_json(self, status: int, data: dict[str, Any], extra_headers: dict[str, str] | None = None) -> None:
         raw = json.dumps(data, separators=(",", ":")).encode("utf-8")
