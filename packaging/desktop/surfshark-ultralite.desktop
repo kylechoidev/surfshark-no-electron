@@ -1,9 +1,9 @@
 [Desktop Entry]
 Type=Application
 Version=1.0
-Name=Surf Shark Ultra Lite
+Name=Surf Shark Ultra Lite (No Electron)
 GenericName=WireGuard VPN Client
-Comment=Zero-Electron Native NetworkManager WireGuard Client for Surfshark
+Comment=Zero-Electron Native NetworkManager WireGuard Client for Surfshark (v2.0)
 Icon=surfshark-ultralite
 Exec=surfshark-lite ui
 Terminal=false

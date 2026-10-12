@@ -48,9 +48,14 @@ EOF
 chmod 0755 "${BIN_DIR}/surfshark-lite"
 
 cp "${SCRIPT_DIR}/packaging/systemd/surfshark-ultralite.service" "${SYSTEMD_USER_DIR}/surfshark-ultralite.service"
-sed "s|^Exec=surfshark-lite ui|Exec=${BIN_DIR}/surfshark-lite ui|g; s|^Exec=surfshark-lite |Exec=${BIN_DIR}/surfshark-lite |g" \
-  "${SCRIPT_DIR}/packaging/desktop/surfshark-ultralite.desktop" > "${DESKTOP_DIR}/surfshark-ultralite.desktop"
 cp "${SCRIPT_DIR}/packaging/icons/surfshark-ultralite.svg" "${ICON_DIR}/surfshark-ultralite.svg"
+sed "s|^Exec=surfshark-lite ui|Exec=${BIN_DIR}/surfshark-lite ui|g; s|^Exec=surfshark-lite |Exec=${BIN_DIR}/surfshark-lite |g; s|^Icon=surfshark-ultralite|Icon=${ICON_DIR}/surfshark-ultralite.svg|g" \
+  "${SCRIPT_DIR}/packaging/desktop/surfshark-ultralite.desktop" > "${DESKTOP_DIR}/surfshark-ultralite.desktop"
+chmod 0755 "${DESKTOP_DIR}/surfshark-ultralite.desktop"
+
+if command -v update-desktop-database >/dev/null 2>&1; then
+  update-desktop-database "${DESKTOP_DIR}" >/dev/null 2>&1 || true
+fi
 
 if [[ "$INSTALL_POLKIT" -eq 1 ]]; then
   echo "==> Installing Polkit rule for user ${USER} (requires sudo)"
@@ -61,6 +66,8 @@ if [[ "$INSTALL_POLKIT" -eq 1 ]]; then
 fi
 
 if [[ "$NO_SERVICE" -eq 0 ]] && command -v systemctl >/dev/null 2>&1; then
+  systemctl --user stop surfshark-ultralite.service >/dev/null 2>&1 || true
+  pkill -f "python3 -m surfshark_lite daemon" >/dev/null 2>&1 || true
   systemctl --user daemon-reload || true
   systemctl --user enable --now surfshark-ultralite.service || true
 fi

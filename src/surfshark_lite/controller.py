@@ -635,6 +635,16 @@ class Controller:
 
         # 2. Polkit permissions
         perms = nm_drv.get_permissions() if nm_ok else {}
+        if nm_ok and all(v == "unknown" for v in perms.values()):
+            from surfshark_lite.netprobe import run_cmd
+            rc, out, _ = run_cmd(["nmcli", "-t", "-f", "PERMISSION,VALUE", "general", "permissions"], timeout=2.0)
+            if rc == 0 and out:
+                for ln in out.splitlines():
+                    if ":" in ln:
+                        p_name, p_val = ln.split(":", 1)
+                        short_p = p_name.replace("org.freedesktop.NetworkManager.", "").strip()
+                        if short_p in ("settings.modify.own", "settings.modify.system", "network-control"):
+                            perms[short_p] = p_val.strip()
         perm_ok = perms.get("settings.modify.own") == "yes" and perms.get("network-control") == "yes"
         checks.append({
             "id": "nm_polkit",

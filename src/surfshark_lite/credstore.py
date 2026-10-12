@@ -381,6 +381,30 @@ def import_official_surfshark_credentials(
                     candidate_keys.append(b64.encode("utf-8"))
             except Exception:
                 pass
+    if not candidate_keys:
+        # Fallback to gir1.2-secret-1 via python3 subprocess when secret-tool CLI is not installed
+        py_script = (
+            "import gi; gi.require_version('Secret', '1'); from gi.repository import Secret; "
+            "s = Secret.Schema.new('org.freedesktop.Secret.Generic', Secret.SchemaFlags.NONE, "
+            "{'service': Secret.SchemaAttributeType.STRING, 'account': Secret.SchemaAttributeType.STRING}); "
+            "pw = Secret.password_lookup_sync(s, {'service': 'Surfshark', 'account': 'storage_key'}, None); "
+            "print(pw or '', end='')"
+        )
+        try:
+            res = subprocess.run(
+                ["/usr/bin/python3", "-c", py_script],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.DEVNULL,
+                timeout=3.0,
+                shell=False,
+                env=_subproc_env(),
+            )
+            if res.returncode == 0 and res.stdout.strip():
+                b64 = res.stdout.strip().decode("utf-8", errors="replace")
+                candidate_keys.append(base64.b64decode(b64))
+                candidate_keys.append(b64.encode("utf-8"))
+        except Exception:
+            pass
     # Fallback key from official main.js j2()
     candidate_keys.append(b"WGtVd25SJmglS2MxUVkjXjdlCg==")
 

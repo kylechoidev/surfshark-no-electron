@@ -375,11 +375,25 @@ class DualHttpServer:
         self._threads.append(t_unix)
 
         if self.tcp_enabled:
-            t_srv = _ThreadedTCPServer(("127.0.0.1", self.tcp_port), _SSULRequestHandler)
+            t_srv: _ThreadedTCPServer | None = None
+            base_port = self.tcp_port
+            for offset in range(10 if base_port != 0 else 1):
+                cand_port = base_port + offset if base_port != 0 else 0
+                try:
+                    t_srv = _ThreadedTCPServer(("127.0.0.1", cand_port), _SSULRequestHandler)
+                    break
+                except OSError:
+                    if base_port == 0 or offset == 9:
+                        raise
+            assert t_srv is not None
+            actual_port = int(t_srv.server_address[1])
             setattr(t_srv, "controller", self.controller)
             setattr(t_srv, "is_unix_socket", False)
-            setattr(t_srv, "tcp_port", t_srv.server_address[1])
-            self.tcp_port = int(t_srv.server_address[1])
+            setattr(t_srv, "tcp_port", actual_port)
+            setattr(u_srv, "tcp_port", actual_port)
+            self.tcp_port = actual_port
+            if hasattr(self.controller, "settings") and isinstance(self.controller.settings.get("web"), dict):
+                self.controller.settings["web"]["port"] = actual_port
             self._tcp_srv = t_srv
 
             t_tcp = threading.Thread(target=t_srv.serve_forever, name="ssul-http-tcp", daemon=True)
