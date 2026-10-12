@@ -1,8 +1,16 @@
-# Surf Shark Ultra Lite for Linux (`v2.0.0`)
+# Surf Shark Ultra Lite — No-Electron Edition (`v2.0.0`)
 
-**Zero-Electron · Zero-Node · Native NetworkManager WireGuard Client for Surfshark on Linux**
+**Zero-Electron · Zero-Node · 100% Standalone Native NetworkManager WireGuard Client for Surfshark on Linux**
 
-Surf Shark Ultra Lite (`surfshark-lite`) replaces the ~500 MB official Electron + Node.js desktop client with a pure-Python 3.10+ daemon, full CLI, and local Web UI (~18 MB RSS, 0.0% idle CPU) that drives Linux kernel WireGuard directly through NetworkManager (`libnm`).
+Surf Shark Ultra Lite (`surfshark-lite`) replaces the ~500 MB official Surfshark Electron + Node.js desktop client with a pure-Python 3.10+ daemon, full CLI, and local Web UI (~18 MB RSS, 0.0% idle CPU) that authenticates directly with Surfshark and drives Linux kernel WireGuard natively through NetworkManager (`libnm`).
+
+> **Looking for the Official App Freezer Edition?**
+> This project has two sister repositories depending on your preference:
+>
+> | Edition | Repository | How It Works | Best For |
+> | :--- | :--- | :--- | :--- |
+> | **No-Electron Standalone (`v2.0.0`)** *(this repo)* | [`kylechoidev/surfshark-no-electron`](https://github.com/kylechoidev/surfshark-no-electron) | Replaces the official Surfshark app completely. Talks directly to Surfshark REST APIs + NetworkManager `libnm`. | Users who want **zero Electron/Node processes** on their system and a 100% standalone native client + CLI + Web UI. |
+> | **Official App Eco-Freezer (`v1.x`)** | [`kylechoidev/surfshark-ultralite`](https://github.com/kylechoidev/surfshark-ultralite) | Keeps the official Surfshark app installed for auth/updates, freezes its Chromium renderers (`SIGSTOP`, 0% CPU), and provides a lightweight Web UI. | Maximum durability against future Surfshark backend/API changes since the official app still handles protocol updates. |
 
 ---
 
