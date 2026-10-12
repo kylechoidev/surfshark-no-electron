@@ -268,30 +268,46 @@ class NmDriver:
             con = our_ac.get_connection()
             iface = None
             devs = our_ac.get_devices() or []
-            if devs:
-                iface = devs[0].get_iface()
-            if not iface and con is not None:
-                iface = con.get_interface_name()
-
             peer_pub = None
             endpoint = None
             cluster_hint = None
             since = None
 
+            if devs:
+                dev = devs[0]
+                iface = dev.get_iface()
+                try:
+                    app, _ = dev.get_applied_connection(0, None)
+                    if app is not None:
+                        s_app_wg = app.get_setting_by_name(NM.SETTING_WIREGUARD_SETTING_NAME)
+                        if s_app_wg is not None and s_app_wg.get_peers_len() > 0:
+                            p0 = s_app_wg.get_peer(0)
+                            peer_pub = p0.get_public_key()
+                            endpoint = p0.get_endpoint()
+                        s_app_user = app.get_setting_by_name(NM.SETTING_USER_SETTING_NAME)
+                        if s_app_user is not None:
+                            cluster_hint = s_app_user.get_data(CLUSTER_KEY)
+                except Exception:
+                    pass
+
+            if not iface and con is not None:
+                iface = con.get_interface_name()
+
             if con is not None:
                 s_user = con.get_setting_by_name(NM.SETTING_USER_SETTING_NAME)
-                if s_user is not None:
+                if s_user is not None and cluster_hint is None:
                     cluster_hint = s_user.get_data(CLUSTER_KEY)
                 s_con = con.get_setting_connection()
                 if s_con is not None:
                     ts = s_con.get_timestamp()
                     if ts and ts > 0:
                         since = float(ts)
-                s_wg = con.get_setting_by_name(NM.SETTING_WIREGUARD_SETTING_NAME)
-                if s_wg is not None and s_wg.get_peers_len() > 0:
-                    p0 = s_wg.get_peer(0)
-                    peer_pub = p0.get_public_key()
-                    endpoint = p0.get_endpoint()
+                if peer_pub is None:
+                    s_wg = con.get_setting_by_name(NM.SETTING_WIREGUARD_SETTING_NAME)
+                    if s_wg is not None and s_wg.get_peers_len() > 0:
+                        p0 = s_wg.get_peer(0)
+                        peer_pub = p0.get_public_key()
+                        endpoint = p0.get_endpoint()
 
             return Observation(
                 up=is_up,
@@ -485,6 +501,14 @@ class NmDriver:
 
             try:
                 new_con = NM.SimpleConnection.new_clone(applied)
+                s_user = new_con.get_setting_by_name(NM.SETTING_USER_SETTING_NAME)
+                if s_user is None:
+                    s_user = NM.SettingUser.new()
+                    new_con.add_setting(s_user)
+                s_user.set_data(CLUSTER_KEY, spec.cluster_id)
+                s_user.set_data(OWNER_KEY, "1")
+                s_user.set_data(VERSION_KEY, __version__)
+
                 s_wg = new_con.get_setting_by_name(NM.SETTING_WIREGUARD_SETTING_NAME)
                 if s_wg is None:
                     raise DriverError(ErrorCode.INTERNAL, "Applied connection lacks wireguard setting")
@@ -517,13 +541,22 @@ class NmDriver:
             def _reapplied(d2: Any, res2: Any, _d2: Any) -> None:
                 try:
                     d2.reapply_finish(res2)
-                    # Also update created-cluster hint on active connection's settings profile if accessible
+                    # Also update profile in NetworkManager settings so persistent profile is kept in sync
                     for ac in (cl.get_active_connections() or []):
                         con_prof = ac.get_connection()
                         if _is_our_connection(con_prof):
                             su = con_prof.get_setting_by_name(NM.SETTING_USER_SETTING_NAME)
                             if su is not None:
                                 su.set_data(CLUSTER_KEY, spec.cluster_id)
+                            swg_prof = con_prof.get_setting_by_name(NM.SETTING_WIREGUARD_SETTING_NAME)
+                            if swg_prof is not None:
+                                swg_prof.clear_peers()
+                                for p in spec.peers:
+                                    swg_prof.append_peer(_build_wg_peer(p))
+                            try:
+                                con_prof.commit_changes_async(True, None, lambda c, r, _d: None, None)
+                            except Exception:
+                                pass
                     fut.set_result(self._current_on_loop())
                 except BaseException as exc:
                     fut.set_exception(_glib_to_driver_error(exc))

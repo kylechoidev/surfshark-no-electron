@@ -212,6 +212,55 @@ class TestTelemetryWatchdogAndWeb(unittest.TestCase):
             self.assertIn("surfsharkd.sock", msg)
             t.join(timeout=2.0)
 
+    def test_adoption_by_peer_pubkey(self) -> None:
+        from unittest.mock import MagicMock
+        from surfshark_lite.controller import Controller
+        from surfshark_lite.catalog import Cluster
+        from surfshark_lite.tunnel.base import Observation
+
+        ctrl = MagicMock(spec=Controller)
+        # Mock clusters in catalog
+        c_vn = Cluster(
+            id="cid-vn", hostname="vn-hcm.prod.surfshark.com", pubkey="PubkeyVN==",
+            country="Vietnam", country_code="VN", region=None, location="Ho Chi Minh City",
+            load=20, tags=frozenset(), kind="generic", lat=10.8, lon=106.6, transit=None,
+            code="vnm-sgn", city_code="sgn", virtual=False, raw={},
+        )
+        c_us = Cluster(
+            id="cid-us", hostname="us-sea.prod.surfshark.com", pubkey="PubkeyUS==",
+            country="United States", country_code="US", region=None, location="Seattle",
+            load=50, tags=frozenset(), kind="generic", lat=47.6, lon=-122.3, transit=None,
+            code="usa-sea", city_code="sea", virtual=False, raw={},
+        )
+        ctrl.catalog = MagicMock()
+        ctrl.catalog.clusters = [c_vn, c_us]
+        ctrl.token_mgr = MagicMock()
+        ctrl.token_mgr.session = None
+
+        # Simulate driver reporting tunnel active with US pubkey, but stale VN cluster_id_hint
+        obs = Observation(
+            up=True, owner="self", iface="surfshark_lite",
+            peer_pubkey="PubkeyUS==", endpoint="84.17.41.81:51820",
+            nm_state="activated", since=100.0, detail="ActiveConnection=Surf Shark Ultra Lite",
+            cluster_id_hint="cid-vn",
+        )
+        ctrl.driver = MagicMock()
+        ctrl.driver.current.return_value = obs
+        ctrl.persisted = MagicMock()
+        ctrl.persisted.last_cluster = "cid-us"
+        ctrl.persisted.desired = MagicMock()
+        ctrl.persisted.desired.target_query = "us"
+        ctrl.persisted.desired.revision = 1
+        ctrl.state_store = MagicMock()
+
+        # Call real unbound _adopt_or_Autoconnect
+        Controller._adopt_or_Autoconnect(ctrl)
+
+        # Assert active cluster was resolved as US (by cryptographic pubkey) NOT VN
+        self.assertEqual(ctrl._active_cluster, c_us)
+        self.assertEqual(ctrl._active_cluster.country_code, "US")
+
 
 if __name__ == "__main__":
     unittest.main()
+

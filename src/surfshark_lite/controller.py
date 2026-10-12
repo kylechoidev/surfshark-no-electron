@@ -333,18 +333,56 @@ class Controller:
 
     def _adopt_or_Autoconnect(self) -> None:
         try:
+            bearer = self.token_mgr.session.token if self.token_mgr.session else None
+            self.catalog.ensure_loaded(bearer=bearer)
             obs = self.driver.current()
             self._last_obs = obs
             if obs.up and obs.owner in ("self", "surfsharkd"):
-                cid = obs.cluster_id_hint or self.persisted.last_cluster
-                if cid:
+                matched: Cluster | None = None
+                # 1. Match by active peer WireGuard public key (cryptographic ground truth)
+                if obs.peer_pubkey:
                     for c in self.catalog.clusters:
-                        if c.id == cid or c.hostname == cid:
-                            self._active_cluster = c
+                        if c.pubkey and c.pubkey == obs.peer_pubkey:
+                            matched = c
                             break
+                # 2. Match by peer endpoint host or IP
+                if matched is None and obs.endpoint:
+                    ep_host = obs.endpoint.split(":", 1)[0].strip()
+                    for c in self.catalog.clusters:
+                        if c.hostname == ep_host:
+                            matched = c
+                            break
+                # 3. Match by persisted last_cluster or desired cluster_id
+                target_cid = self.persisted.last_cluster or self.persisted.desired.cluster_id
+                if matched is None and target_cid:
+                    for c in self.catalog.clusters:
+                        if c.id == target_cid or c.hostname == target_cid:
+                            matched = c
+                            break
+                # 4. Match by driver cluster_id_hint
+                if matched is None and obs.cluster_id_hint:
+                    for c in self.catalog.clusters:
+                        if c.id == obs.cluster_id_hint or c.hostname == obs.cluster_id_hint:
+                            matched = c
+                            break
+
+                if matched is not None:
+                    self._active_cluster = matched
+                    new_desired = Desired(
+                        connected=True,
+                        target_query=self.persisted.desired.target_query or matched.country_code,
+                        cluster_id=matched.id,
+                        revision=self.persisted.desired.revision + 1,
+                    )
+                    self.persisted = self.state_store.update(desired=new_desired, last_cluster=matched.id)
+
                 self._conn_state = ConnState.CONNECTED
                 self._refresh_telemetry(probe_egress=True)
-                log.info("Adopted existing active WireGuard tunnel (%s)", obs.iface)
+                log.info(
+                    "Adopted existing active WireGuard tunnel (%s) -> %s",
+                    obs.iface,
+                    matched.label if matched else "unknown",
+                )
                 return
         except Exception as exc:
             log.debug("Initial driver probe during startup: %s", exc)
@@ -569,9 +607,13 @@ class Controller:
                 self.egress.check(expected_country_code=exp_cc, timeout=3.5)
             elif action == "reapply_poke" and self._active_spec is not None:
                 self.driver.replace_peer(self._active_spec, threading.Event(), force_reset=True)
-            elif action == "failover_cluster" and self._active_cluster is not None:
-                cc = self._active_cluster.country_code
-                self.connect(target=cc)
+            elif action == "failover_cluster":
+                target = (
+                    self.persisted.desired.target_query
+                    or (self._active_cluster.country_code if self._active_cluster else None)
+                    or "fastest"
+                )
+                self.connect(target=target)
             elif action == "full_reconnect":
                 self.reconnect()
             elif action == "enter_fault":
