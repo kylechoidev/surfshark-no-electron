@@ -367,6 +367,8 @@ class Controller:
             home=self.persisted.home_location,
             last_cluster_id=self.persisted.last_cluster,
             allow_ambiguous_top=False,
+            auto_probe=True,
+            tunnel_connected=self._last_obs.up,
         )
         assert res.choice is not None
         cluster = res.choice

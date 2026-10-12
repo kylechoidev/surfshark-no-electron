@@ -361,6 +361,11 @@ body {
   background: rgba(24, 210, 182, 0.09);
 }
 
+.data-table tr.fastest-country-row td {
+  background: rgba(37, 99, 235, 0.14);
+  font-weight: 600;
+}
+
 #auth-badge {
   cursor: pointer;
 }

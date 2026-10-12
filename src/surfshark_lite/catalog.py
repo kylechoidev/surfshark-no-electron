@@ -707,22 +707,52 @@ class CatalogManager:
         home: HomeLocation | None = None,
         last_cluster_id: str | None = None,
         allow_ambiguous_top: bool = False,
+        auto_probe: bool = False,
+        tunnel_connected: bool = False,
     ) -> Resolution:
+        lats = self.get_fresh_latencies()
         res = self.resolver().resolve(
             query,
             filters=filters,
-            latencies=self.get_fresh_latencies(),
+            latencies=lats,
             home=home,
             last_cluster_id=last_cluster_id,
         )
         if res.choice is None or not res.candidates:
             raise TargetNotFoundError(query or "fastest")
         if res.ambiguous and not allow_ambiguous_top:
-            lats = self.get_fresh_latencies()
             raise TargetAmbiguousError(
                 query or "",
                 [c.to_summary(lats.get(c.hostname)) for c in res.candidates[:10]],
             )
+        if (
+            auto_probe
+            and res.scope in ("country", "region", "global")
+            and len(res.candidates) > 1
+            and not any(c.hostname in lats for c in res.candidates)
+        ):
+            scope_str = (
+                f"country:{res.choice.country_code}"
+                if res.scope == "country" and res.choice is not None
+                else "nearest"
+            )
+            try:
+                self.probe_latencies(
+                    scope=scope_str,
+                    home=home,
+                    last_cluster_id=last_cluster_id,
+                    tunnel_connected=tunnel_connected,
+                )
+                lats = self.get_fresh_latencies()
+                res = self.resolver().resolve(
+                    query,
+                    filters=filters,
+                    latencies=lats,
+                    home=home,
+                    last_cluster_id=last_cluster_id,
+                )
+            except Exception as exc:
+                log.debug("Auto-probe during resolve skipped: %s", exc)
         return res
 
     def _detect_local_region(self) -> str | None:

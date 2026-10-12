@@ -130,13 +130,39 @@
     }
   }
 
+  async function connectFastestInCountry(countryCode, btnEl) {
+    if (!countryCode) return;
+    showError("");
+    const origText = btnEl ? btnEl.textContent : "";
+    if (btnEl) {
+      btnEl.disabled = true;
+      btnEl.textContent = "Connecting…";
+    }
+    try {
+      const kind = $("server-kind").value || null;
+      const st = await apiCall("POST", "/api/v1/connect", {
+        target: "fastest " + countryCode.toLowerCase(),
+        kind: kind
+      });
+      renderStatus(st);
+      await loadServers(false);
+    } catch (err) {
+      showError(err.message);
+    } finally {
+      if (btnEl) {
+        btnEl.disabled = false;
+        btnEl.textContent = origText;
+      }
+    }
+  }
+
   function renderServersTable() {
     const tbody = $("servers-tbody");
     const q = ($("server-search").value || "").trim().toLowerCase();
     const cc = $("server-country").value;
     const kind = $("server-kind").value;
 
-    const filtered = allClusters.filter((c) => {
+    const filteredAll = allClusters.filter((c) => {
       if (cc && c.country_code !== cc) return false;
       if (kind && c.kind !== kind) return false;
       if (q) {
@@ -144,7 +170,23 @@
         if (!hay.includes(q)) return false;
       }
       return true;
-    }).slice(0, 120);
+    });
+    const filtered = filteredAll.slice(0, 120);
+
+    const uniqueCountries = Array.from(new Set(filteredAll.map((c) => c.country_code)));
+    const activeCc = cc || (uniqueCountries.length === 1 ? uniqueCountries[0] : "");
+    const btnCountry = $("btn-connect-country");
+    if (btnCountry) {
+      if (activeCc && filteredAll.length > 0) {
+        const sample = filteredAll[0];
+        btnCountry.hidden = false;
+        btnCountry.dataset.country = activeCc;
+        btnCountry.textContent = (sample.flag ? sample.flag + " " : "") + "Fastest in " + activeCc;
+      } else {
+        btnCountry.hidden = true;
+        btnCountry.dataset.country = "";
+      }
+    }
 
     tbody.textContent = "";
     if (filtered.length === 0) {
@@ -163,6 +205,50 @@
       currentStatus.connection_state === "CONNECTED" &&
       currentStatus.active_cluster
     ) ? currentStatus.active_cluster.hostname : null;
+
+    if (activeCc && filteredAll.length > 1) {
+      const sample = filteredAll[0];
+      const loads = filteredAll.map((c) => c.load).filter((v) => v !== null && v !== undefined);
+      const minLoad = loads.length > 0 ? Math.min.apply(null, loads) : null;
+      const rtts = filteredAll.map((c) => c.latency_ms).filter((v) => v !== null && v !== undefined);
+      const minRtt = rtts.length > 0 ? Math.min.apply(null, rtts) : null;
+
+      const trFast = document.createElement("tr");
+      trFast.className = "fastest-country-row";
+
+      const tdLoc = document.createElement("td");
+      tdLoc.textContent = (sample.flag ? sample.flag + " " : "") + "Fastest in " + sample.country + " (" + filteredAll.length + " locations)";
+      trFast.appendChild(tdLoc);
+
+      const tdHost = document.createElement("td");
+      tdHost.className = "mono";
+      tdHost.textContent = "fastest " + activeCc.toLowerCase();
+      trFast.appendChild(tdHost);
+
+      const tdKind = document.createElement("td");
+      tdKind.textContent = "auto (best)";
+      trFast.appendChild(tdKind);
+
+      const tdLoad = document.createElement("td");
+      tdLoad.textContent = minLoad !== null ? ("min " + minLoad + "%") : "—";
+      trFast.appendChild(tdLoad);
+
+      const tdRtt = document.createElement("td");
+      tdRtt.className = "mono";
+      tdRtt.textContent = minRtt !== null ? (minRtt + " ms") : "auto-probe";
+      trFast.appendChild(tdRtt);
+
+      const tdAct = document.createElement("td");
+      const btnFast = document.createElement("button");
+      btnFast.type = "button";
+      btnFast.className = "btn btn-primary btn-small";
+      btnFast.textContent = "Connect Fastest";
+      btnFast.addEventListener("click", () => connectFastestInCountry(activeCc, btnFast));
+      tdAct.appendChild(btnFast);
+      trFast.appendChild(tdAct);
+
+      tbody.appendChild(trFast);
+    }
 
     for (const c of filtered) {
       const isConnectedRow = activeHost && c.hostname === activeHost;
@@ -378,13 +464,19 @@
     $("server-country").addEventListener("change", renderServersTable);
     $("server-kind").addEventListener("change", renderServersTable);
 
+    $("btn-connect-country").addEventListener("click", () => {
+      const btn = $("btn-connect-country");
+      const cc = btn.dataset.country || $("server-country").value;
+      if (cc) connectFastestInCountry(cc, btn);
+    });
+
     $("btn-refresh-servers").addEventListener("click", () => loadServers(true));
     $("btn-probe-rtt").addEventListener("click", async () => {
       const btn = $("btn-probe-rtt");
       btn.disabled = true;
       btn.textContent = "Probing…";
       try {
-        const cc = $("server-country").value;
+        const cc = ($("btn-connect-country") && $("btn-connect-country").dataset.country) || $("server-country").value;
         await apiCall("POST", "/api/v1/servers/probe", { scope: cc ? ("country:" + cc) : "nearest" });
         await loadServers(false);
       } catch (err) {
